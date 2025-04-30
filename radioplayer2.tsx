@@ -1,0 +1,170 @@
+import { useState, useRef, useEffect } from 'react'
+import { Play, Pause, ListMusic, Volume2 } from 'lucide-react'
+import { Button } from "/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "/components/ui/card"
+
+// Sample M3U playlist data (would normally be fetched from a URL)
+const m3uPlaylist = `#EXTM3U
+#EXTINF:-1,Radio Paradise
+http://stream.radioparadise.com/flac
+#EXTINF:-1,Radio 1
+http://icestreaming.rai.it/1.mp3
+#EXTINF:-1,Radio 2
+http://icestreaming.rai.it/2.mp3
+#EXTINF:-1,Radio 3
+http://icestreaming.rai.it/3.mp3
+#EXTINF:-1,Radio Italia
+https://radioitaliasmi.akamaized.net/hls/live/2093120/RISMI/master.m3u8
+
+interface RadioStation {
+  id: string
+  name: string
+  url: string
+}
+
+export default function RadioPlayer() {
+  const [stations, setStations] = useState<RadioStation[]>([])
+  const [currentStation, setCurrentStation] = useState<RadioStation | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [volume, setVolume] = useState(0.7)
+  const audioRef = useRef<HTMLAudioElement>(new Audio())
+
+  // Parse M3U playlist on component mount
+  useEffect(() => {
+    const parsedStations: RadioStation[] = []
+    const lines = m3uPlaylist.split('\n')
+    
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith('#EXTINF')) {
+        const name = lines[i].split(',')[1]?.trim() || `Station ${parsedStations.length + 1}`
+        const url = lines[i + 1]?.trim()
+        if (url) {
+          parsedStations.push({
+            id: `station-${parsedStations.length}`,
+            name,
+            url
+          })
+        }
+      }
+    }
+    
+    setStations(parsedStations)
+  }, [])
+
+  // Handle audio playback
+  useEffect(() => {
+    const audio = audioRef.current
+    
+    const handlePlay = () => setIsPlaying(true)
+    const handlePause = () => setIsPlaying(false)
+    const handleEnded = () => setIsPlaying(false)
+    
+    audio.addEventListener('play', handlePlay)
+    audio.addEventListener('pause', handlePause)
+    audio.addEventListener('ended', handleEnded)
+    
+    return () => {
+      audio.removeEventListener('play', handlePlay)
+      audio.removeEventListener('pause', handlePause)
+      audio.removeEventListener('ended', handleEnded)
+    }
+  }, [])
+
+  // Update volume when changed
+  useEffect(() => {
+    audioRef.current.volume = volume
+  }, [volume])
+
+  const togglePlayback = () => {
+    if (!currentStation && stations.length > 0) {
+      // If no station selected, play the first one
+      playStation(stations[0])
+      return
+    }
+
+    if (isPlaying) {
+      audioRef.current.pause()
+    } else {
+      audioRef.current.play().catch(e => console.error("Playback failed:", e))
+    }
+  }
+
+  const playStation = (station: RadioStation) => {
+    audioRef.current.pause()
+    audioRef.current.src = station.url
+    audioRef.current.load()
+    setCurrentStation(station)
+    audioRef.current.play().catch(e => console.error("Playback failed:", e))
+  }
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVolume = parseFloat(e.target.value)
+    setVolume(newVolume)
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <Card className="max-w-2xl mx-auto">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ListMusic className="text-primary" />
+            <span>Radio Player</span>
+          </CardTitle>
+        </CardHeader>
+        
+        <CardContent className="space-y-6">
+          {/* Player Controls */}
+          <div className="flex items-center gap-4 p-4 bg-gray-100 rounded-lg">
+            <Button 
+              size="lg" 
+              onClick={togglePlayback}
+              className="w-12 h-12 p-0 rounded-full"
+            >
+              {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+            </Button>
+            
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate">
+                {currentStation?.name || 'No station selected'}
+              </p>
+              <p className="text-sm text-gray-500">
+                {isPlaying ? 'Now Playing' : 'Paused'}
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Volume2 size={18} className="text-gray-500" />
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={volume}
+                onChange={handleVolumeChange}
+                className="w-24 accent-primary"
+              />
+            </div>
+          </div>
+          
+          {/* Station List */}
+          <div className="space-y-2">
+            <h3 className="font-medium text-lg">Available Stations</h3>
+            <div className="border rounded-lg divide-y">
+              {stations.map(station => (
+                <button
+                  key={station.id}
+                  onClick={() => playStation(station)}
+                  className={`w-full p-3 text-left hover:bg-gray-50 transition-colors ${currentStation?.id === station.id ? 'bg-blue-50' : ''}`}
+                >
+                  <p className="font-medium">{station.name}</p>
+                  <p className="text-sm text-gray-500 truncate">{station.url}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
